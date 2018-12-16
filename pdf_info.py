@@ -8,11 +8,11 @@ from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.preprocessing import Normalizer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics.pairwise import cosine_similarity
-import gensim
+# import gensim
 import get_pdf_data
 import os
 import pandas as pd
-from gensim.models import word2vec
+# from gensim.models import word2vec
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 
@@ -23,14 +23,11 @@ class Lib:
         def __init__(self, name, content, trouble_shooting_sec):
             self.title = name # pdf title
             self.content = content # whole pdf content
-            self.tf_idf = None # top 15 TF_IDF valued terms in pdf, excluding stop words
+            self.tf_idf = None # top 15 TF_IDF valued terms in pdf, excluding stop words0
             self.trouble_shooting_section = trouble_shooting_sec # troubleshooting section
 
-        # def __repr__(self):
-        #     return 'Author name: ' + str(self.author) + 'pdf Title: ' + str(self.title) + 'pdf Content: ' + self.content
-
     def __init__(self, calc_svd, calc_word_count, calc_word2vec):
-        self.pdf_repository = os.fsencode("shooting") # our working repository folder
+        self.pdf_repository = os.fsencode("pdfs/batch4") # our working repository folder
         self.max_pdfs_num = np.inf
         self.content = []
         self.word2vec_model = None
@@ -43,10 +40,6 @@ class Lib:
     def __repr__(self):
         return str(self.lib)
 
-
-
-
-
     def print_only_enter_params(self, print_author, print_title, print_content):
         # helper print function, can print according to entered params
         for pdf in self.lib:
@@ -58,26 +51,50 @@ class Lib:
         print('Over all pdf in lib: ', len(self.lib))
 
     def get_pdf_tuples(self, calc_word2vec):
-        # this function fills the author, titles, content lists of class Lib and creates pdf objects according to repository
+        "main pdf object generator func, traverses over entere pdf_repository and extracts pdfs"
+        def save_troubleshooting(index:int, filename , txt:""):
+            file = open(str(index)+filename+".txt", "w", encoding="utf-8")
+            file.write(txt)
+            print("writing troubleshoot segment to pdf index: " +str(index)+ " done")
+
         pdf_rep = [] # list of PDFs holding the pdf author , name and content in each tuple.
         word2vec_content = []
         for index ,file in enumerate(os.listdir(self.pdf_repository)):
             filename = os.fsdecode(file)
             if filename.endswith('.pdf') and index < self.max_pdfs_num:
-                print("creating pdf_content for index: ", index)
-                pdf_content, trouble_shooting = get_pdf_data.pdf_to_text(filename)
-                if pdf_content:
-                    if trouble_shooting: Lib.trouble_shooting_sections_found+=1
-                    self.content.append(pdf_content) # fill content list
-                    pdf_rep.append(Lib.Pdf(index,pdf_content, trouble_shooting)) # create new pdf
-                    if calc_word2vec: word2vec_content.append(gensim.utils.simple_preprocess(pdf_content))
-        if calc_word2vec:
-            self.word2vec_model = gensim.models.Word2Vec(sentences=word2vec_content, size=300, window=7, min_count=2, workers=10) #builds vocabulary & train
+                try:
+                    print("creating pdf_content for index: ", index)
+                    #pdf_content, trouble_shooting = get_pdf_data.pdf_to_text(filename)
+                    trouble_shooting = get_pdf_data.pdf_to_text(filename) 
+                    if trouble_shooting:
+                        print('trouble shooting found for: ' +filename)
+                        # print(trouble_shooting)
+
+                        Lib.trouble_shooting_sections_found+=1
+                        save_troubleshooting(index, filename, trouble_shooting)
+                        #self.content.append(pdf_content) # fill content list
+                        #pdf_rep.append(Lib.Pdf(index,pdf_content, trouble_shooting)) # create new pdf
+                        # if calc_word2vec: word2vec_content.append(gensim.utils.simple_preprocess(pdf_content))
+                except:
+                    continue
+
+        # if calc_word2vec: # if word2vec param was entered
+            # self.word2vec_model = gensim.models.Word2Vec(sentences=word2vec_content, size=300, window=7, min_count=2, workers=10) #builds vocabulary & train
         print('Number of pdf extracted ' +str(len(pdf_rep)) + ' out of '+ str(self.max_pdfs_num))
         print('Number of troubleshooting sections found:' + str(Lib.trouble_shooting_sections_found))
         self.max_pdfs_num = len(pdf_rep)
         print("finished creating pdf lib")
         return pdf_rep
+
+    ################################################ TF_IDF terms generator and cvs creator ########################
+    def turn_to_pdf(self):
+        for index ,file in enumerate(os.listdir("/cs/labs/dshahaf/bar371/my-first-venv/pdf_parser/test")):
+            filename = os.fsdecode(file)
+            os.system("pdftotext -layout "+filename)
+
+
+
+
 
     def _calc_word_count(self, with_stop_words):
 
@@ -97,49 +114,15 @@ class Lib:
 
 
     def calc_tf_tfidf_for_all_lib(self):
-        # this function generates the top tf, tf idf values for all pdf, in two phases (for memory optimization)
-
-        # 'calc word count with excluding stop words'
-
-        # 'creating tf, tf_idf top 15 terms with stop words'
+        # this function generates the top tf_idf for all terms in each pdf
         for index, pdf in enumerate(self.lib): # for each pdf generate top terms
             print("creating top tf_idf for pdf: ", index)
             self.generate_term_values(pdf, index)
         print("finished creating tf_idfs for all pdfs")
 
-    def tsne_plot(self):
-        "Creates and TSNE model and plots it"
-        labels = []
-        tokens = []
-
-        for word in self.word2vec_model.wv.vocab:
-            tokens.append(self.word2vec_model[word])
-            labels.append(word)
-
-        tsne_model = TSNE(perplexity=10, n_components=2, init='pca', n_iter=251, random_state=10)
-        new_values = tsne_model.fit_transform(tokens)
-
-        x = []
-        y = []
-        for value in new_values:
-            x.append(value[0])
-            y.append(value[1])
-
-        plt.figure(figsize=(16, 16))
-        for i in range(len(x)):
-            plt.scatter(x[i], y[i])
-            plt.annotate(labels[i],
-                         xy=(x[i], y[i]),
-                         xytext=(5, 2),
-                         textcoords='offset points',
-                         ha='right',
-                         va='bottom')
-        plt.show()
 
     def generate_csvs(self):
-        # this function is in charge of created 4 csvs, according to the lib pdf top 15 terms
-        # both for tf and tf_idf as well as including and excluding stop words
-
+        "this function generates TF_IDF cvs file from the lib pdfs "
         def gen_row(tf_idf, index):
             # helper function, generate row with author name, pdf title , and entered to 15 terms
             row = [index]
@@ -160,13 +143,17 @@ class Lib:
         create_csv(tf_idf_csv, 'tf_idf.csv')
         print("finished creating csv")
 
+
+    ################################################## similarty, SVD, TNSE, word2Vec and others ######################
     def pdfs_by_phrase(self, model, word_counts, search_query):
+        "using cosain_similarty on all pdfs words to search for similarteis to search query"
         phrases_matrix = model.transform([search_query])  # convert search string into a vector using trained model
         similarities = cosine_similarity(word_counts, phrases_matrix[0]).flatten()  # compute similarity of the search string to each pdf
         similarity_order = (-similarities).argsort().flatten()[:15]  # sort pdf by similarity to the term
         return similarity_order, similarities, search_query
 
     def _gen_SVD(self):
+        # generates SVD model
         from sklearn.decomposition import TruncatedSVD
         svd_model = TruncatedSVD(n_components=self.max_pdfs_num)
         text_matrix_svd = svd_model.fit_transform(self.word_counts_tf_idf)
@@ -207,28 +194,58 @@ class Lib:
             print("comparing " + word + "by SVD to repo")
             self.get_SVD_term_compare(word)
 
+    def tsne_plot(self):
+        "Creates and TSNE model and plots it"
+        labels = []
+        tokens = []
+
+        for word in self.word2vec_model.wv.vocab:
+            tokens.append(self.word2vec_model[word])
+            labels.append(word)
+
+        tsne_model = TSNE(perplexity=10, n_components=2, init='pca', n_iter=251, random_state=10)
+        new_values = tsne_model.fit_transform(tokens)
+
+        x = []
+        y = []
+        for value in new_values:
+            x.append(value[0])
+            y.append(value[1])
+
+        plt.figure(figsize=(16, 16))
+        for i in range(len(x)):
+            plt.scatter(x[i], y[i])
+            plt.annotate(labels[i],
+                         xy=(x[i], y[i]),
+                         xytext=(5, 2),
+                         textcoords='offset points',
+                         ha='right',
+                         va='bottom')
+        plt.show()
 
 
-def print_result(org_pharse,book_index_arry,similarty_arry):
-    # print simlarty results for entered book_index_arr and similarty_arr
-    matrix = []
-    # generate similarty matrix
-    for book_index, similarty in zip(book_index_arry, similarty_arry):
-        matrix.append([libar.lib[book_index].author, libar.lib[book_index].title, similarty])
+    def print_result(self, org_pharse,book_index_arry,similarty_arry):
+        # print simlarty results for entered book_index_arr and similarty_arr
+        matrix = []
+        # generate similarty matrix
+        for book_index, similarty in zip(book_index_arry, similarty_arry):
+            matrix.append([libar.lib[book_index].author, libar.lib[book_index].title, similarty])
 
-    #creates csv according to matrix, with name as the searched pharse
-    with open(org_pharse, 'w', encoding="utf-8") as csvfile:
-        filewriter = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
-        for row in matrix:
-            filewriter.writerow(row)
+        #creates csv according to matrix, with name as the searched pharse
+        with open(org_pharse, 'w', encoding="utf-8") as csvfile:
+            filewriter = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
+            for row in matrix:
+                filewriter.writerow(row)
 
 
 def get_similary_for_pharses(pharses, libar):
     for phrase in pharses:
         book_index_arr , similarty_arr, s_pharse = libar.books_by_phrase(libar.pipeline , libar.word_counts_tf_idf
                                                    , phrase)
-        print_result(s_pharse, book_index_arr, similarty_arr)
+        libar.print_result(s_pharse, book_index_arr, similarty_arr)
 
+
+######################################################################################################################
 
 
 if __name__ == '__main__':
@@ -251,4 +268,5 @@ if __name__ == '__main__':
     #      'A horse, a sheep, a pig and a cow walk into a pub'], libar)
 
 
-
+#
+# pdftotext -layout NAME_OF_PDF.pd
